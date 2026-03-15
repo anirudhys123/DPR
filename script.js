@@ -1,13 +1,17 @@
+// ========== SUPABASE CONFIG ==========
 const SUPABASE_URL = "https://bqvpwzaekjtuctylzjoc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_mcRzWAYgimSGoHHzcaDYEg_Oxsj0Zdv";
-
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ========== GLOBAL VARIABLES ==========
 let rows = [];
 let editId = null;
 let sortCol = "date";
 let sortDir = "asc";
 let charts = {};
+
+// NEW: currently opened row for photo manager
+let currentPhotoRowId = null;
 
 const SYSICO = {
   HVAC: "wind",
@@ -18,18 +22,16 @@ const SYSICO = {
   Mechanical: "wrench-adjustable-fill"
 };
 
+// ========== HELPER FUNCTIONS ==========
 function markSaved(msg = "Saved just now") {
   const el = document.getElementById("lastSaved");
-  if (el) {
-    el.innerHTML = `<i class="bi bi-cloud-check-fill"></i> ${msg}`;
-  }
+  if (el) el.innerHTML = `<i class="bi bi-cloud-check-fill"></i> ${msg}`;
 }
 
 function autoSt(p, a) {
   const planned = Number(p) || 0;
   const actual = Number(a) || 0;
   const d = planned - actual;
-
   if (actual === 0 && planned === 0) return "Not Started";
   if (actual >= 100) return "Completed";
   if (d > 5) return "Delayed";
@@ -37,6 +39,32 @@ function autoSt(p, a) {
   return "On Track";
 }
 
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeAttr(str) {
+  return String(str ?? "").replaceAll('"', "&quot;");
+}
+
+function toast(msg, icon = "bi-info-circle", type = "info") {
+  const dock = document.getElementById("toastDock");
+  if (!dock) return;
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.innerHTML = `<div class="t-ico"><i class="bi ${icon}"></i></div><span class="t-msg">${escapeHtml(msg)}</span>`;
+  dock.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity .3s";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 320);
+  }, 2800);
+}
+
+// ========== DATA LOADING ==========
 async function load() {
   try {
     const { data, error } = await supabaseClient
@@ -54,7 +82,9 @@ async function load() {
       planned: Number(r.planned) || 0,
       actual: Number(r.actual) || 0,
       status: r.status || autoSt(r.planned, r.actual),
-      remarks: r.remarks || ""
+      remarks: r.remarks || "",
+      // NEW: include photos array
+      photos: r.photos || []
     }));
 
     render();
@@ -69,6 +99,7 @@ async function load() {
   }
 }
 
+// ========== FILTERING & SORTING ==========
 function getFiltered() {
   const q = (document.getElementById("searchInput")?.value || "").toLowerCase();
   const sys = document.getElementById("sysFilter")?.value || "";
@@ -120,6 +151,7 @@ function applyFilters() {
   render();
 }
 
+// ========== RENDER TABLE ==========
 function render() {
   const tbody = document.getElementById("tBody");
   if (!tbody) return;
@@ -129,7 +161,7 @@ function render() {
   if (!filtered.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10">
+        <td colspan="11"> <!-- increased to 11 -->
           <div class="empty">
             <div class="empty-ico"><i class="bi bi-inbox"></i></div>
             <p>No activities found</p>
@@ -166,6 +198,10 @@ function rowHTML(r) {
       ? `<span class="delay-chip dc-pos"><i class="bi bi-arrow-up-short"></i>+${d.toFixed(1)}%</span>`
       : `<span class="delay-chip dc-neg"><i class="bi bi-arrow-down-short"></i>${d.toFixed(1)}%</span>`;
 
+  // NEW: photo cell content
+  const photoCount = r.photos && r.photos.length ? r.photos.length : 0;
+  const photoBadge = photoCount ? `<span class="photo-count">${photoCount}</span>` : '';
+
   return `
     <tr class="${rc}" data-id="${r.id}">
       <td class="sel-col"><input type="checkbox" class="rck" onchange="updDelBtn()"></td>
@@ -187,6 +223,13 @@ function rowHTML(r) {
       <td>${dc}</td>
       <td>${sBadge(r.status)}</td>
       <td class="td-rem" contenteditable="true" onblur="cEdit(this,'${r.id}','remarks')">${escapeHtml(r.remarks || "")}</td>
+      <!-- NEW: photos cell -->
+      <td class="photos-cell">
+        <button class="abt" onclick="openPhotoManager('${r.id}')" title="Manage photos">
+          <i class="bi bi-camera"></i>
+        </button>
+        ${photoBadge}
+      </td>
       <td class="td-act">
         <button class="abt" title="Edit" onclick="openEdit('${r.id}')"><i class="bi bi-pencil-fill"></i></button>
         <button class="abt del" title="Delete" onclick="delRow('${r.id}')"><i class="bi bi-trash3-fill"></i></button>
@@ -246,6 +289,7 @@ function updateSbStats() {
     html || '<div style="color:var(--text3);font-size:12px">No data</div>';
 }
 
+// ========== INLINE EDIT ==========
 async function cEdit(el, id, field) {
   const r = rows.find((x) => String(x.id) === String(id));
   if (!r) return;
@@ -278,6 +322,7 @@ async function cEdit(el, id, field) {
   }
 }
 
+// ========== SELECTION & BATCH DELETE ==========
 function toggleSelAll(cb) {
   document.querySelectorAll(".rck").forEach((c) => {
     c.checked = cb.checked;
@@ -324,6 +369,7 @@ async function delRow(id) {
   }
 }
 
+// ========== ADD/EDIT MODAL ==========
 function openModal() {
   editId = null;
   document.getElementById("mTitle").textContent = "Add Activity";
@@ -402,6 +448,7 @@ document.getElementById("ov")?.addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeModal();
 });
 
+// ========== EXPORT EXCEL ==========
 function exportExcel() {
   if (!rows.length) {
     toast("No data to export", "bi-info-circle", "info");
@@ -409,7 +456,7 @@ function exportExcel() {
   }
 
   const data = [
-    ["Date", "System", "Activity", "Planned %", "Actual %", "Delay %", "Status", "Remarks"],
+    ["Date", "System", "Activity", "Planned %", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
     ...rows.map((r) => [
       r.date,
       r.system,
@@ -418,20 +465,15 @@ function exportExcel() {
       r.actual,
       (Number(r.planned) - Number(r.actual)).toFixed(1),
       r.status,
-      r.remarks || ""
+      r.remarks || "",
+      (r.photos || []).join(", ")
     ])
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws["!cols"] = [
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 40 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 30 }
+    { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 10 },
+    { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
   ];
 
   const wb = XLSX.utils.book_new();
@@ -440,21 +482,143 @@ function exportExcel() {
   toast("Excel exported!", "bi-file-earmark-check-fill", "success");
 }
 
-async function clearAll() {
-  if (!confirm("Clear ALL data?")) return;
+// ========== PHOTO MANAGEMENT ==========
+function openPhotoManager(id) {
+  const row = rows.find(r => String(r.id) === String(id));
+  if (!row) return;
+  currentPhotoRowId = id;
+  document.getElementById('photoModalTitle').innerHTML = `<i class="bi bi-camera-fill"></i> Photos – ${escapeHtml(row.activity)}`;
+  renderPhotoGrid(row.photos || []);
+  document.getElementById('photoOv').classList.add('open');
+}
+
+function closePhotoModal() {
+  document.getElementById('photoOv').classList.remove('open');
+  currentPhotoRowId = null;
+}
+
+function renderPhotoGrid(photos) {
+  const grid = document.getElementById('photoGrid');
+  if (!photos.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px;">No photos yet</div>';
+    return;
+  }
+  grid.innerHTML = photos.map(url => `
+    <div class="photo-item">
+      <img src="${url}" class="photo-thumb" onclick="window.open('${url}','_blank')">
+      <button class="photo-delete" onclick="deletePhoto('${currentPhotoRowId}', '${url}')"><i class="bi bi-x"></i></button>
+    </div>
+  `).join('');
+}
+
+// File input change handler
+document.getElementById('photoUploadInput')?.addEventListener('change', async function(e) {
+  const files = e.target.files;
+  if (!files.length || !currentPhotoRowId) return;
+
+  toast('Uploading...', 'bi-cloud-upload', 'info');
+
+  const uploadPromises = [];
+  for (let file of files) {
+    const ext = file.name.split('.').pop();
+    const fileName = `${currentPhotoRowId}_${Date.now()}_${Math.random().toString(36).substring(2)}.${ext}`;
+    const filePath = `public/${fileName}`; // optional folder inside bucket
+
+    const promise = supabaseClient.storage
+      .from('dpr-photos')
+      .upload(filePath, file, { cacheControl: '3600', upsert: false })
+      .then(({ data, error }) => {
+        if (error) throw error;
+        const { data: { publicUrl } } = supabaseClient.storage
+          .from('dpr-photos')
+          .getPublicUrl(filePath);
+        return publicUrl;
+      });
+    uploadPromises.push(promise);
+  }
 
   try {
-    const { error } = await supabaseClient.from("dpr").delete().gte("id", 0);
+    const urls = await Promise.all(uploadPromises);
+
+    const row = rows.find(r => String(r.id) === String(currentPhotoRowId));
+    const updatedPhotos = [...(row.photos || []), ...urls];
+
+    const { error } = await supabaseClient
+      .from('dpr')
+      .update({ photos: updatedPhotos })
+      .eq('id', currentPhotoRowId);
+
     if (error) throw error;
 
-    toast("All data cleared", "bi-trash3-fill", "info");
-    await load();
+    row.photos = updatedPhotos;
+    renderPhotoGrid(updatedPhotos);
+
+    // Update the photo count badge in the table
+    const cell = document.querySelector(`tr[data-id="${currentPhotoRowId}"] .photos-cell`);
+    if (cell) {
+      const countSpan = cell.querySelector('.photo-count');
+      if (updatedPhotos.length) {
+        if (countSpan) {
+          countSpan.textContent = updatedPhotos.length;
+        } else {
+          cell.innerHTML += `<span class="photo-count">${updatedPhotos.length}</span>`;
+        }
+      } else if (countSpan) {
+        countSpan.remove();
+      }
+    }
+
+    toast('Photos uploaded successfully!', 'bi-check-circle-fill', 'success');
   } catch (err) {
-    console.error("Clear all error:", err);
-    toast("Failed to clear data", "bi-exclamation-triangle-fill", "error");
+    console.error('Upload error:', err);
+    toast('Failed to upload photos', 'bi-exclamation-triangle-fill', 'error');
+  } finally {
+    document.getElementById('photoUploadInput').value = '';
+  }
+});
+
+async function deletePhoto(rowId, url) {
+  if (!confirm('Remove this photo?')) return;
+  try {
+    const row = rows.find(r => String(r.id) === String(rowId));
+    const updatedPhotos = (row.photos || []).filter(u => u !== url);
+
+    const { error } = await supabaseClient
+      .from('dpr')
+      .update({ photos: updatedPhotos })
+      .eq('id', rowId);
+
+    if (error) throw error;
+
+    row.photos = updatedPhotos;
+
+    if (currentPhotoRowId === rowId) {
+      renderPhotoGrid(updatedPhotos);
+    }
+
+    const cell = document.querySelector(`tr[data-id="${rowId}"] .photos-cell`);
+    if (cell) {
+      const countSpan = cell.querySelector('.photo-count');
+      if (updatedPhotos.length) {
+        if (countSpan) countSpan.textContent = updatedPhotos.length;
+      } else if (countSpan) {
+        countSpan.remove();
+      }
+    }
+
+    toast('Photo deleted', 'bi-trash3-fill', 'info');
+  } catch (err) {
+    console.error('Delete error:', err);
+    toast('Failed to delete photo', 'bi-exclamation-triangle-fill', 'error');
   }
 }
 
+// Close photo modal when clicking overlay
+document.getElementById('photoOv')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closePhotoModal();
+});
+
+// ========== CHARTS ==========
 function renderCharts() {
   const dark = document.documentElement.dataset.theme === "dark";
   const grid = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)";
@@ -609,6 +773,7 @@ function renderCharts() {
   });
 }
 
+// ========== THEME & SIDEBAR ==========
 function toggleTheme() {
   const d = document.documentElement.dataset.theme === "dark";
   document.documentElement.dataset.theme = d ? "light" : "dark";
@@ -634,6 +799,7 @@ function switchView(name, btn) {
   if (window.innerWidth < 768) toggleSb();
 }
 
+// ========== CLOCK ==========
 function updateClock() {
   document.getElementById("liveClock").textContent = new Date().toLocaleTimeString("en-IN", {
     hour: "2-digit",
@@ -645,33 +811,7 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-function toast(msg, icon = "bi-info-circle", type = "info") {
-  const dock = document.getElementById("toastDock");
-  if (!dock) return;
-
-  const el = document.createElement("div");
-  el.className = `toast ${type}`;
-  el.innerHTML = `<div class="t-ico"><i class="bi ${icon}"></i></div><span class="t-msg">${escapeHtml(msg)}</span>`;
-  dock.appendChild(el);
-
-  setTimeout(() => {
-    el.style.transition = "opacity .3s";
-    el.style.opacity = "0";
-    setTimeout(() => el.remove(), 320);
-  }, 2800);
-}
-
-function escapeHtml(str) {
-  return String(str ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function escapeAttr(str) {
-  return String(str ?? "").replaceAll('"', "&quot;");
-}
-
+// ========== INIT ==========
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("todayDate").textContent = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
@@ -687,6 +827,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+// Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
   if (e.ctrlKey && e.key === "n") {
