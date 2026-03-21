@@ -57,7 +57,7 @@
     <div class="fl-lbl"><i class="bi bi-flag-fill"></i> Status</div>
     <select class="fl-sel" id="statusFilter" onchange="applyFilters()">
       <option value="">All Statuses</option>
-      <option>On Track</option><option>Delayed</option>
+      <option>Delayed</option>
       <option>In Progress</option><option>Not Started</option><option>Completed</option>
     </select>
   </div>
@@ -88,6 +88,40 @@
       </div>
     </div>
 
+    <!-- SUMMARY DASHBOARD -->
+<div class="summary-dashboard">
+  <div class="summary-cards">
+    <div class="summary-card">
+      <div class="summary-card-icon"><i class="bi bi-check2-circle"></i></div>
+      <div class="summary-card-info">
+        <div class="summary-card-label">Completed</div>
+        <div class="summary-card-value" id="summaryCompleted">0</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="summary-card-info">
+        <div class="summary-card-label">Pending</div>
+        <div class="summary-card-value" id="summaryPending">0</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      <div class="summary-card-info">
+        <div class="summary-card-label">Delay Alerts</div>
+        <div class="summary-card-value" id="summaryDelayed">0</div>
+      </div>
+    </div>
+  </div>
+  <div class="weekly-chart-card">
+    <div class="cc-hd">
+      <div class="cc-title"><i class="bi bi-calendar-week-fill"></i> Weekly Progress</div>
+      <span class="cc-badge">Last 6 weeks</span>
+    </div>
+    <canvas id="weeklyChart" height="200"></canvas>
+  </div>
+</div>
+
     <!-- KPI CARDS -->
     <div class="cards">
       <div class="kpi total">
@@ -104,7 +138,7 @@
           <span class="kpi-badge up"><i class="bi bi-arrow-up-short"></i> Good</span>
         </div>
         <div class="kpi-num" id="card-done">0</div>
-        <div class="kpi-lbl"><i class="bi bi-check-circle-fill"></i> On Track</div>
+        <!-- <div class="kpi-lbl"><i class="bi bi-check-circle-fill"></i> On Track</div> -->
       </div>
       <div class="kpi delayed">
         <div class="kpi-top">
@@ -246,7 +280,7 @@
           <label class="flbl"><i class="bi bi-flag-fill"></i> Status</label>
           <select class="fsel" id="m-status">
             <option>Not Started</option><option>In Progress</option>
-            <option>On Track</option><option>Delayed</option><option>Completed</option>
+            <option>Delayed</option><option>Completed</option>
           </select>
         </div>
         <div class="fgrp">

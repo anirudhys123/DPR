@@ -9,8 +9,8 @@ let editId = null;
 let sortCol = "date";
 let sortDir = "asc";
 let charts = {};
+let weeklyChart = null; // NEW: for weekly progress chart
 
-// NEW: currently opened row for photo manager
 let currentPhotoRowId = null;
 
 const SYSICO = {
@@ -83,11 +83,11 @@ async function load() {
       actual: Number(r.actual) || 0,
       status: r.status || autoSt(r.planned, r.actual),
       remarks: r.remarks || "",
-      // NEW: include photos array
       photos: r.photos || []
     }));
 
     render();
+    updateSummary(); // NEW: update summary cards & weekly chart
     markSaved("Synced from database");
 
     if (document.getElementById("view-charts")?.classList.contains("active")) {
@@ -161,7 +161,7 @@ function render() {
   if (!filtered.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11"> <!-- increased to 11 -->
+        <td colspan="11">
           <div class="empty">
             <div class="empty-ico"><i class="bi bi-inbox"></i></div>
             <p>No activities found</p>
@@ -198,7 +198,6 @@ function rowHTML(r) {
       ? `<span class="delay-chip dc-pos"><i class="bi bi-arrow-up-short"></i>+${d.toFixed(1)}%</span>`
       : `<span class="delay-chip dc-neg"><i class="bi bi-arrow-down-short"></i>${d.toFixed(1)}%</span>`;
 
-  // NEW: photo cell content
   const photoCount = r.photos && r.photos.length ? r.photos.length : 0;
   const photoBadge = photoCount ? `<span class="photo-count">${photoCount}</span>` : '';
 
@@ -223,7 +222,6 @@ function rowHTML(r) {
       <td>${dc}</td>
       <td>${sBadge(r.status)}</td>
       <td class="td-rem" contenteditable="true" onblur="cEdit(this,'${r.id}','remarks')">${escapeHtml(r.remarks || "")}</td>
-      <!-- NEW: photos cell -->
       <td class="photos-cell">
         <button class="abt" onclick="openPhotoManager('${r.id}')" title="Manage photos">
           <i class="bi bi-camera"></i>
@@ -482,6 +480,169 @@ function exportExcel() {
   toast("Excel exported!", "bi-file-earmark-check-fill", "success");
 }
 
+// ========== SUMMARY DASHBOARD FUNCTIONS (UPDATED) ==========
+
+// Helper: get ISO week number (year-week)
+function getISOWeekNumber(dateStr) {
+  const date = new Date(dateStr);
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${weekNo}`;
+}
+
+// Helper: get Monday date of an ISO week (year, week)
+function getDateFromISOWeek(year, week) {
+  const simple = new Date(year, 0, 1 + (week - 1) * 7);
+  const dow = simple.getDay();
+  const isoWeekStart = new Date(simple);
+  if (dow <= 4) isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  else isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  return isoWeekStart;
+}
+
+function getSummaryMetrics() {
+  const completed = rows.filter(r => r.status === "Completed" || Number(r.actual) === 100).length;
+  const pending = rows.filter(r => r.status !== "Completed" && Number(r.actual) < 100).length;
+  const delayed = rows.filter(r => (Number(r.planned) - Number(r.actual)) > 5).length;
+  return { completed, pending, delayed };
+}
+
+function getWeeklyData(weeksLimit = 6) {
+  const weeksMap = new Map();
+
+  rows.forEach(r => {
+    if (!r.date) return;
+    const weekKey = getISOWeekNumber(r.date);
+    const planned = Number(r.planned) || 0;
+    const actual = Number(r.actual) || 0;
+    if (!weeksMap.has(weekKey)) {
+      weeksMap.set(weekKey, { plannedSum: 0, actualSum: 0, count: 0 });
+    }
+    const w = weeksMap.get(weekKey);
+    w.plannedSum += planned;
+    w.actualSum += actual;
+    w.count++;
+  });
+
+  const weeksArray = Array.from(weeksMap.entries())
+    .map(([week, data]) => ({
+      week,
+      plannedAvg: data.count ? data.plannedSum / data.count : 0,
+      actualAvg: data.count ? data.actualSum / data.count : 0
+    }))
+    .sort((a, b) => a.week.localeCompare(b.week));
+
+  const lastWeeks = weeksArray.slice(-weeksLimit);
+  
+  // Create labels like "Mar 9–15"
+  const labels = lastWeeks.map(w => {
+    const [year, weekNum] = w.week.split('-W');
+    const start = getDateFromISOWeek(parseInt(year), parseInt(weekNum));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `${startStr}–${endStr}`;
+  });
+  
+  const plannedAvg = lastWeeks.map(w => w.plannedAvg.toFixed(1));
+  const actualAvg = lastWeeks.map(w => w.actualAvg.toFixed(1));
+
+  return { labels, plannedAvg, actualAvg };
+}
+
+function renderWeeklyChart() {
+  const ctx = document.getElementById('weeklyChart');
+  if (!ctx) return;
+
+  const { labels, plannedAvg, actualAvg } = getWeeklyData(6);
+  if (labels.length === 0) {
+    // No data – hide chart or show placeholder
+    if (weeklyChart) weeklyChart.destroy();
+    weeklyChart = null;
+    ctx.style.display = 'none';
+    return;
+  }
+  ctx.style.display = 'block';
+
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const textColor = isDark ? '#8b91b8' : '#5a5f7a';
+
+  if (weeklyChart) weeklyChart.destroy();
+
+  weeklyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Planned %',
+          data: plannedAvg,
+          borderColor: '#0284c7',
+          backgroundColor: 'transparent',
+          tension: 0.3,
+          pointBackgroundColor: '#0284c7',
+          pointBorderColor: '#fff',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: false
+        },
+        {
+          label: 'Actual %',
+          data: actualAvg,
+          borderColor: '#4f46e5',
+          backgroundColor: 'transparent',
+          tension: 0.3,
+          pointBackgroundColor: '#4f46e5',
+          pointBorderColor: '#fff',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: gridColor },
+          title: { display: true, text: 'Progress %', color: textColor }
+        },
+        x: {
+          grid: { display: false },
+          title: { display: true, text: 'Week', color: textColor }
+        }
+      },
+      plugins: {
+        tooltip: { mode: 'index', intersect: false },
+        legend: {
+          position: 'top',
+          labels: { color: textColor, usePointStyle: true }
+        }
+      }
+    }
+  });
+}
+
+function updateSummary() {
+  const { completed, pending, delayed } = getSummaryMetrics();
+  document.getElementById('summaryCompleted').textContent = completed;
+  document.getElementById('summaryPending').textContent = pending;
+  document.getElementById('summaryDelayed').textContent = delayed;
+
+  // Only render chart if dashboard view is active
+  const dashboardActive = document.getElementById('view-dashboard').classList.contains('active');
+  if (dashboardActive) {
+    renderWeeklyChart();
+  }
+}
+
 // ========== PHOTO MANAGEMENT ==========
 function openPhotoManager(id) {
   const row = rows.find(r => String(r.id) === String(id));
@@ -511,7 +672,6 @@ function renderPhotoGrid(photos) {
   `).join('');
 }
 
-// File input change handler
 document.getElementById('photoUploadInput')?.addEventListener('change', async function(e) {
   const files = e.target.files;
   if (!files.length || !currentPhotoRowId) return;
@@ -522,7 +682,7 @@ document.getElementById('photoUploadInput')?.addEventListener('change', async fu
   for (let file of files) {
     const ext = file.name.split('.').pop();
     const fileName = `${currentPhotoRowId}_${Date.now()}_${Math.random().toString(36).substring(2)}.${ext}`;
-    const filePath = `public/${fileName}`; // optional folder inside bucket
+    const filePath = `public/${fileName}`;
 
     const promise = supabaseClient.storage
       .from('dpr-photos')
@@ -553,7 +713,6 @@ document.getElementById('photoUploadInput')?.addEventListener('change', async fu
     row.photos = updatedPhotos;
     renderPhotoGrid(updatedPhotos);
 
-    // Update the photo count badge in the table
     const cell = document.querySelector(`tr[data-id="${currentPhotoRowId}"] .photos-cell`);
     if (cell) {
       const countSpan = cell.querySelector('.photo-count');
@@ -613,7 +772,6 @@ async function deletePhoto(rowId, url) {
   }
 }
 
-// Close photo modal when clicking overlay
 document.getElementById('photoOv')?.addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closePhotoModal();
 });
@@ -782,6 +940,9 @@ function toggleTheme() {
     : '<i class="bi bi-sun-fill"></i>';
 
   if (document.getElementById("view-charts").classList.contains("active")) renderCharts();
+  if (document.getElementById("view-dashboard").classList.contains("active") && weeklyChart) {
+    renderWeeklyChart();
+  }
 }
 
 function toggleSb() {

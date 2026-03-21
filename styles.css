@@ -33,25 +33,289 @@
 body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;transition:background var(--t),color var(--t)}
 
 /* ── HEADER ── */
-.hdr{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 20px;z-index:200;box-shadow:var(--sm)}
-.hdr-l{display:flex;align-items:center;gap:14px}
-.hamburger{display:none;align-items:center;justify-content:center;width:36px;height:36px;background:none;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;color:var(--text2);font-size:18px;transition:all var(--t)}
-.hamburger:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--indigo),var(--violet));border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;box-shadow:var(--si);flex-shrink:0}
-.logo-name{font-family:var(--fh);font-weight:900;font-size:1.3rem;color:var(--text);letter-spacing:-0.5px;font-style:italic}
-.logo-name b{color:var(--indigo);font-style:normal}
-.logo-sep{width:1px;height:22px;background:var(--border2);margin:0 4px}
-.logo-sub{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3)}
-.hdr-r{display:flex;align-items:center;gap:6px}
-.hdr-clock{font-family:var(--fm);font-size:12.5px;font-weight:500;color:var(--text2);background:var(--surface2);border:1px solid var(--border);padding:5px 12px;border-radius:var(--r);letter-spacing:.5px;margin-right:6px}
-.hbtn{display:flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 13px;border:1px solid var(--border);background:var(--surface);border-radius:var(--r);color:var(--text2);font-size:13px;font-weight:600;font-family:var(--fb);cursor:pointer;transition:all var(--t);white-space:nowrap}
-.hbtn i{font-size:15px}
-.hbtn:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
-.hbtn.pri{background:var(--indigo);color:#fff;border-color:var(--indigo);box-shadow:var(--si)}
-.hbtn.pri:hover{background:#4338ca;border-color:#4338ca}
-.hbtn.sq{padding:0;width:36px}
+.hdr {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px 0 20px;
+  z-index: 200;
+  box-shadow: var(--sm);
+}
 
+.hdr-l {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 18px;
+  transition: all var(--t);
+}
+
+.hamburger:hover {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.logo-icon {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  box-shadow: var(--si);
+  flex-shrink: 0;
+}
+
+.logo-name {
+  font-family: var(--fh);
+  font-weight: 900;
+  font-size: 1.3rem;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  font-style: italic;
+}
+
+.logo-name b {
+  color: var(--indigo);
+  font-style: normal;
+}
+
+.logo-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border2);
+  margin: 0 4px;
+}
+
+.logo-sub {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.hdr-r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hdr-clock {
+  font-family: var(--fm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: var(--r);
+  letter-spacing: 0.5px;
+  margin-right: 6px;
+}
+
+.hbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--r);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--fb);
+  cursor: pointer;
+  transition: all var(--t);
+  white-space: nowrap;
+}
+
+.hbtn i {
+  font-size: 15px;
+}
+
+.hbtn:hover {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+.hbtn.pri {
+  background: var(--indigo);
+  color: #fff;
+  border-color: var(--indigo);
+  box-shadow: var(--si);
+}
+
+.hbtn.pri:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.hbtn.sq {
+  padding: 0;
+  width: 36px;
+}
+
+/* ========== RESPONSIVE ENHANCEMENTS ========== */
+@media (max-width: 860px) {
+  /* Hide decorative elements to save space */
+  .logo-sep,
+  .logo-sub {
+    display: none;
+  }
+
+  .hdr-clock {
+    font-size: 11px;
+    padding: 4px 8px;
+    margin-right: 2px;
+  }
+
+  .hdr-r {
+    gap: 4px;
+  }
+
+  .hbtn {
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hamburger {
+    display: flex; /* show hamburger menu button */
+  }
+
+  .hdr {
+    padding: 0 16px;
+  }
+
+  .hdr-l {
+    gap: 8px;
+  }
+
+  /* Hide clock entirely on medium-small screens for cleaner header */
+  .hdr-clock {
+    display: none;
+  }
+
+  /* Reduce button text visibility - keep icons clear */
+  .hbtn .btn-text {
+    display: none;
+  }
+
+  /* Make Add Row & Export buttons more compact (icon only) */
+  .hbtn {
+    padding: 0 10px;
+    width: auto;
+  }
+
+  /* Primary button still has padding but without text */
+  .hbtn.pri {
+    padding: 0 12px;
+  }
+
+  /* Keep the theme button square (no change needed) */
+  .hbtn.sq {
+    width: 36px;
+  }
+
+  /* Reduce gap for tighter layout */
+  .hdr-r {
+    gap: 4px;
+  }
+
+  /* Logo name can be slightly smaller on mobile */
+  .logo-name {
+    font-size: 1.1rem;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hdr {
+    padding: 0 12px;
+    height: 60px; /* slightly reduced header height on very small devices */
+  }
+
+  .logo-name {
+    font-size: 1rem;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    border-radius: 9px;
+  }
+
+  .hbtn {
+    height: 32px;
+  }
+
+  .hbtn.pri,
+  .hbtn:not(.sq) {
+    padding: 0 8px;
+  }
+
+  .hbtn.sq {
+    width: 32px;
+  }
+
+  .hamburger {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Extra small: ensure buttons are tappable and no overflow */
+@media (max-width: 380px) {
+  .hdr-r {
+    gap: 2px;
+  }
+
+  .hbtn i {
+    font-size: 14px;
+  }
+}
 /* ── SIDEBAR ── */
 .sb-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);z-index:140}
 .sb{position:fixed;left:0;top:var(--header-h);width:var(--sidebar-w);height:calc(100vh - var(--header-h));background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 14px 24px;overflow-y:auto;overflow-x:hidden;transition:transform var(--t);z-index:150}
@@ -278,3 +542,88 @@ td[contenteditable="true"]:focus{background:var(--indigo-lt);outline:2px solid v
   .logo-sep,.logo-sub{display:none}
 }
 @media(max-width:480px){.main{padding:12px}.kpi-num{font-size:2rem}}
+
+/* ── SUMMARY DASHBOARD ── */
+.summary-dashboard {
+  margin-bottom: 28px;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rxl);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform var(--t), box-shadow var(--t);
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--s);
+}
+
+.summary-card-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--surface2);
+  border-radius: var(--rl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--indigo);
+}
+
+.summary-card-info {
+  flex: 1;
+}
+
+.summary-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.summary-card-value {
+  font-family: var(--fm);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.weekly-chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rxl);
+  padding: 20px;
+  box-shadow: var(--sm);
+}
+
+.weekly-chart-card .cc-hd {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .summary-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .summary-card {
+    padding: 16px;
+  }
+  .summary-card-value {
+    font-size: 1.8rem;
+  }
+}
