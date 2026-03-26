@@ -9,7 +9,7 @@ let editId = null;
 let sortCol = "date";
 let sortDir = "asc";
 let charts = {};
-let weeklyChart = null; // NEW: for weekly progress chart
+let weeklyChart = null;
 
 let currentPhotoRowId = null;
 
@@ -28,15 +28,28 @@ function markSaved(msg = "Saved just now") {
   if (el) el.innerHTML = `<i class="bi bi-cloud-check-fill"></i> ${msg}`;
 }
 
-function autoSt(p, a) {
-  const planned = Number(p) || 0;
-  const actual = Number(a) || 0;
-  const d = planned - actual;
-  if (actual === 0 && planned === 0) return "Not Started";
-  if (actual >= 100) return "Completed";
+function autoSt(planned, actual) {
+  const p = Number(planned) || 0;
+  const a = Number(actual) || 0;
+  const d = p - a;
+  if (a === 0 && p === 0) return "Not Started";
+  if (a >= 100) return "Completed";
   if (d > 5) return "Delayed";
-  if (actual > 0 && actual < planned) return "In Progress";
+  if (a > 0 && a < p) return "In Progress";
   return "On Track";
+}
+
+// Extract the first number from a string (supports decimals)
+function extractNumber(str) {
+  const match = String(str).match(/\d+(?:\.\d+)?/);
+  return match ? parseFloat(match[0]) : 0;
+}
+
+function calcProgress(requiredStr, installedStr) {
+  const required = extractNumber(requiredStr);
+  const installed = extractNumber(installedStr);
+  if (required === 0) return 0;
+  return Math.min(100, ((installed / required) * 100).toFixed(1));
 }
 
 function escapeHtml(str) {
@@ -74,20 +87,29 @@ async function load() {
 
     if (error) throw error;
 
-    rows = (data || []).map((r) => ({
-      id: r.id,
-      date: r.date || "",
-      system: r.system || "HVAC",
-      activity: r.activity || "",
-      planned: Number(r.planned) || 0,
-      actual: Number(r.actual) || 0,
-      status: r.status || autoSt(r.planned, r.actual),
-      remarks: r.remarks || "",
-      photos: r.photos || []
-    }));
+    rows = (data || []).map((r) => {
+      // required and installed are now stored as strings (e.g., "150 sqm")
+      const requiredStr = String(r.required || "0");
+      const installedStr = String(r.installed || "0");
+      const actual = calcProgress(requiredStr, installedStr);
+      const status = autoSt(100, actual);
+      return {
+        id: r.id,
+        date: r.date || "",
+        system: r.system || "HVAC",
+        activity: r.activity || "",
+        required: requiredStr,
+        installed: installedStr,
+        planned: 100,
+        actual: actual,
+        status: status,
+        remarks: r.remarks || "",
+        photos: r.photos || []
+      };
+    });
 
     render();
-    updateSummary(); // NEW: update summary cards & weekly chart
+    updateSummary();
     markSaved("Synced from database");
 
     if (document.getElementById("view-charts")?.classList.contains("active")) {
@@ -118,15 +140,23 @@ function getFiltered() {
 
 function getSorted(arr) {
   return [...arr].sort((a, b) => {
-    let va = sortCol === "delay" ? a.planned - a.actual : a[sortCol];
-    let vb = sortCol === "delay" ? b.planned - b.actual : b[sortCol];
-
-    if (["planned", "actual", "delay", "id"].includes(sortCol)) {
-      va = Number(va) || 0;
-      vb = Number(vb) || 0;
+    let va, vb;
+    if (sortCol === "delay") {
+      va = 100 - a.actual;
+      vb = 100 - b.actual;
+    } else if (sortCol === "required" || sortCol === "installed") {
+      // Sort by the numeric part for quantities
+      va = extractNumber(a[sortCol]);
+      vb = extractNumber(b[sortCol]);
+    } else if (sortCol === "actual") {
+      va = Number(a.actual) || 0;
+      vb = Number(b.actual) || 0;
+    } else if (sortCol === "id") {
+      va = Number(a.id) || 0;
+      vb = Number(b.id) || 0;
     } else {
-      va = String(va ?? "").toLowerCase();
-      vb = String(vb ?? "").toLowerCase();
+      va = String(a[sortCol] ?? "").toLowerCase();
+      vb = String(b[sortCol] ?? "").toLowerCase();
     }
 
     if (va < vb) return sortDir === "asc" ? -1 : 1;
@@ -140,7 +170,7 @@ function sortT(col) {
   sortCol = col;
 
   document.querySelectorAll("thead th").forEach((t) => t.classList.remove("asc", "desc"));
-  const map = { date: 1, system: 2, activity: 3, planned: 4, actual: 5, delay: 6, status: 7 };
+  const map = { date: 1, system: 2, activity: 3, required: 4, installed: 5, actual: 6, delay: 7, status: 8 };
   const th = document.querySelectorAll("thead th")[map[col]];
   if (th) th.classList.add(sortDir === "asc" ? "asc" : "desc");
 
@@ -161,7 +191,7 @@ function render() {
   if (!filtered.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11">
+        <td colspan="12">
           <div class="empty">
             <div class="empty-ico"><i class="bi bi-inbox"></i></div>
             <p>No activities found</p>
@@ -185,10 +215,9 @@ function render() {
 }
 
 function rowHTML(r) {
-  const d = Number(r.planned) - Number(r.actual);
+  const d = 100 - Number(r.actual);
   const rc = d > 5 ? "row-red" : d <= 0 && r.actual > 0 ? "row-grn" : "";
   const ico = SYSICO[r.system] || "gear";
-  const af = d > 5 ? "pf-late" : "pf-ok";
   const ap = Math.min(100, Math.max(0, Number(r.actual) || 0));
 
   const dc =
@@ -207,16 +236,12 @@ function rowHTML(r) {
       <td><span class="td-date" contenteditable="true" onblur="cEdit(this,'${r.id}','date')">${escapeHtml(r.date)}</span></td>
       <td><span class="sys-p sys-${escapeAttr(r.system)}"><i class="bi bi-${ico}"></i>${escapeHtml(r.system)}</span></td>
       <td style="max-width:210px;font-weight:500" contenteditable="true" onblur="cEdit(this,'${r.id}','activity')">${escapeHtml(r.activity)}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','required')">${escapeHtml(r.required || "0")}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','installed')">${escapeHtml(r.installed || "0")}</td>
       <td>
         <div class="prog">
-          <div class="prog-bar"><div class="prog-fill pf-plan" style="width:${Number(r.planned) || 0}%"></div></div>
-          <span class="prog-n" contenteditable="true" onblur="cEdit(this,'${r.id}','planned')">${Number(r.planned) || 0}</span>
-        </div>
-      </td>
-      <td>
-        <div class="prog">
-          <div class="prog-bar"><div class="prog-fill ${af}" style="width:${ap}%"></div></div>
-          <span class="prog-n" contenteditable="true" onblur="cEdit(this,'${r.id}','actual')">${Number(r.actual) || 0}</span>
+          <div class="prog-bar"><div class="prog-fill pf-ok" style="width:${ap}%"></div></div>
+          <span class="prog-n">${Number(r.actual) || 0}</span>
         </div>
       </td>
       <td>${dc}</td>
@@ -250,10 +275,8 @@ function sBadge(s) {
 
 function updateCards() {
   const t = rows.length;
-  const ok = rows.filter(
-    (r) => Number(r.planned) - Number(r.actual) <= 0 || r.status === "On Track" || r.status === "Completed"
-  ).length;
-  const dl = rows.filter((r) => Number(r.planned) - Number(r.actual) > 5).length;
+  const ok = rows.filter(r => r.status === "Completed" || r.actual >= 100).length;
+  const dl = rows.filter(r => (100 - r.actual) > 5).length;
   const avg = t ? (rows.reduce((s, r) => s + (Number(r.actual) || 0), 0) / t).toFixed(1) : 0;
 
   document.getElementById("card-total").textContent = t;
@@ -296,16 +319,17 @@ async function cEdit(el, id, field) {
     let v = el.textContent.trim();
     const updateObj = {};
 
-    if (field === "planned" || field === "actual") {
-      v = Math.min(100, Math.max(0, parseFloat(v) || 0));
-      el.textContent = v;
-      updateObj[field] = v;
+    // For required/installed, we store the string as-is (including unit)
+    // For other fields, just store the value
+    updateObj[field] = v;
 
-      const newPlanned = field === "planned" ? v : Number(r.planned);
-      const newActual = field === "actual" ? v : Number(r.actual);
-      updateObj.status = autoSt(newPlanned, newActual);
-    } else {
-      updateObj[field] = v;
+    // If required or installed changed, recalculate actual and status
+    if (field === "required" || field === "installed") {
+      const newRequired = field === "required" ? v : r.required;
+      const newInstalled = field === "installed" ? v : r.installed;
+      const newActual = calcProgress(newRequired, newInstalled);
+      updateObj.actual = newActual;
+      updateObj.status = autoSt(100, newActual);
     }
 
     const { error } = await supabaseClient.from("dpr").update(updateObj).eq("id", id);
@@ -373,11 +397,11 @@ function openModal() {
   document.getElementById("mTitle").textContent = "Add Activity";
   document.getElementById("mIco").innerHTML = '<i class="bi bi-plus-circle-fill"></i>';
   document.getElementById("m-date").value = new Date().toISOString().split("T")[0];
-  ["m-activity", "m-planned", "m-actual", "m-remarks"].forEach((id) => {
-    document.getElementById(id).value = "";
-  });
+  document.getElementById("m-activity").value = "";
+  document.getElementById("m-required").value = "";
+  document.getElementById("m-installed").value = "";
+  document.getElementById("m-remarks").value = "";
   document.getElementById("m-system").selectedIndex = 0;
-  document.getElementById("m-status").value = "Not Started";
   document.getElementById("ov").classList.add("open");
   setTimeout(() => document.getElementById("m-activity").focus(), 220);
 }
@@ -392,9 +416,8 @@ function openEdit(id) {
   document.getElementById("m-date").value = r.date;
   document.getElementById("m-system").value = r.system;
   document.getElementById("m-activity").value = r.activity;
-  document.getElementById("m-planned").value = r.planned;
-  document.getElementById("m-actual").value = r.actual;
-  document.getElementById("m-status").value = r.status;
+  document.getElementById("m-required").value = r.required;
+  document.getElementById("m-installed").value = r.installed;
   document.getElementById("m-remarks").value = r.remarks || "";
   document.getElementById("ov").classList.add("open");
 }
@@ -407,9 +430,8 @@ async function saveRow() {
   const date = document.getElementById("m-date").value;
   const system = document.getElementById("m-system").value;
   const activity = document.getElementById("m-activity").value.trim();
-  const planned = Math.min(100, Math.max(0, parseFloat(document.getElementById("m-planned").value) || 0));
-  const actual = Math.min(100, Math.max(0, parseFloat(document.getElementById("m-actual").value) || 0));
-  const status = document.getElementById("m-status").value || autoSt(planned, actual);
+  const required = document.getElementById("m-required").value.trim();
+  const installed = document.getElementById("m-installed").value.trim();
   const remarks = document.getElementById("m-remarks").value.trim();
 
   if (!date || !activity) {
@@ -417,19 +439,21 @@ async function saveRow() {
     return;
   }
 
+  const actual = calcProgress(required, installed);
+  const planned = 100;
+  const status = autoSt(planned, actual);
+
   try {
     if (editId) {
       const { error } = await supabaseClient
         .from("dpr")
-        .update({ date, system, activity, planned, actual, status, remarks })
+        .update({ date, system, activity, required, installed, planned, actual, status, remarks })
         .eq("id", editId);
-
       if (error) throw error;
     } else {
       const { error } = await supabaseClient
         .from("dpr")
-        .insert([{ date, system, activity, planned, actual, status, remarks }]);
-
+        .insert([{ date, system, activity, required, installed, planned, actual, status, remarks }]);
       if (error) throw error;
     }
 
@@ -454,14 +478,15 @@ function exportExcel() {
   }
 
   const data = [
-    ["Date", "System", "Activity", "Planned %", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
+    ["Date", "System", "Activity", "Required", "Installed", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
     ...rows.map((r) => [
       r.date,
       r.system,
       r.activity,
-      r.planned,
+      r.required,
+      r.installed,
       r.actual,
-      (Number(r.planned) - Number(r.actual)).toFixed(1),
+      (100 - Number(r.actual)).toFixed(1),
       r.status,
       r.remarks || "",
       (r.photos || []).join(", ")
@@ -470,8 +495,8 @@ function exportExcel() {
 
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws["!cols"] = [
-    { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 10 },
-    { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
+    { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 15 },
+    { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
   ];
 
   const wb = XLSX.utils.book_new();
@@ -480,9 +505,7 @@ function exportExcel() {
   toast("Excel exported!", "bi-file-earmark-check-fill", "success");
 }
 
-// ========== SUMMARY DASHBOARD FUNCTIONS (UPDATED) ==========
-
-// Helper: get ISO week number (year-week)
+// ========== SUMMARY DASHBOARD FUNCTIONS ==========
 function getISOWeekNumber(dateStr) {
   const date = new Date(dateStr);
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -492,7 +515,6 @@ function getISOWeekNumber(dateStr) {
   return `${d.getUTCFullYear()}-W${weekNo}`;
 }
 
-// Helper: get Monday date of an ISO week (year, week)
 function getDateFromISOWeek(year, week) {
   const simple = new Date(year, 0, 1 + (week - 1) * 7);
   const dow = simple.getDay();
@@ -505,7 +527,7 @@ function getDateFromISOWeek(year, week) {
 function getSummaryMetrics() {
   const completed = rows.filter(r => r.status === "Completed" || Number(r.actual) === 100).length;
   const pending = rows.filter(r => r.status !== "Completed" && Number(r.actual) < 100).length;
-  const delayed = rows.filter(r => (Number(r.planned) - Number(r.actual)) > 5).length;
+  const delayed = rows.filter(r => (100 - Number(r.actual)) > 5).length;
   return { completed, pending, delayed };
 }
 
@@ -515,13 +537,11 @@ function getWeeklyData(weeksLimit = 6) {
   rows.forEach(r => {
     if (!r.date) return;
     const weekKey = getISOWeekNumber(r.date);
-    const planned = Number(r.planned) || 0;
     const actual = Number(r.actual) || 0;
     if (!weeksMap.has(weekKey)) {
-      weeksMap.set(weekKey, { plannedSum: 0, actualSum: 0, count: 0 });
+      weeksMap.set(weekKey, { actualSum: 0, count: 0 });
     }
     const w = weeksMap.get(weekKey);
-    w.plannedSum += planned;
     w.actualSum += actual;
     w.count++;
   });
@@ -529,14 +549,12 @@ function getWeeklyData(weeksLimit = 6) {
   const weeksArray = Array.from(weeksMap.entries())
     .map(([week, data]) => ({
       week,
-      plannedAvg: data.count ? data.plannedSum / data.count : 0,
       actualAvg: data.count ? data.actualSum / data.count : 0
     }))
     .sort((a, b) => a.week.localeCompare(b.week));
 
   const lastWeeks = weeksArray.slice(-weeksLimit);
-  
-  // Create labels like "Mar 9–15"
+
   const labels = lastWeeks.map(w => {
     const [year, weekNum] = w.week.split('-W');
     const start = getDateFromISOWeek(parseInt(year), parseInt(weekNum));
@@ -546,20 +564,18 @@ function getWeeklyData(weeksLimit = 6) {
     const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     return `${startStr}–${endStr}`;
   });
-  
-  const plannedAvg = lastWeeks.map(w => w.plannedAvg.toFixed(1));
+
   const actualAvg = lastWeeks.map(w => w.actualAvg.toFixed(1));
 
-  return { labels, plannedAvg, actualAvg };
+  return { labels, actualAvg };
 }
 
 function renderWeeklyChart() {
   const ctx = document.getElementById('weeklyChart');
   if (!ctx) return;
 
-  const { labels, plannedAvg, actualAvg } = getWeeklyData(6);
+  const { labels, actualAvg } = getWeeklyData(6);
   if (labels.length === 0) {
-    // No data – hide chart or show placeholder
     if (weeklyChart) weeklyChart.destroy();
     weeklyChart = null;
     ctx.style.display = 'none';
@@ -579,19 +595,7 @@ function renderWeeklyChart() {
       labels,
       datasets: [
         {
-          label: 'Planned %',
-          data: plannedAvg,
-          borderColor: '#0284c7',
-          backgroundColor: 'transparent',
-          tension: 0.3,
-          pointBackgroundColor: '#0284c7',
-          pointBorderColor: '#fff',
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          fill: false
-        },
-        {
-          label: 'Actual %',
+          label: 'Actual Progress %',
           data: actualAvg,
           borderColor: '#4f46e5',
           backgroundColor: 'transparent',
@@ -636,7 +640,6 @@ function updateSummary() {
   document.getElementById('summaryPending').textContent = pending;
   document.getElementById('summaryDelayed').textContent = delayed;
 
-  // Only render chart if dashboard view is active
   const dashboardActive = document.getElementById('view-dashboard').classList.contains('active');
   if (dashboardActive) {
     renderWeeklyChart();
@@ -819,10 +822,6 @@ function renderCharts() {
   });
 
   const sys = ["HVAC", "Electrical", "Fire", "BMS", "Civil", "Mechanical"];
-  const pl = sys.map((s) => {
-    const rs = rows.filter((r) => r.system === s);
-    return rs.length ? +(rs.reduce((a, r) => a + (Number(r.planned) || 0), 0) / rs.length).toFixed(1) : 0;
-  });
   const ac = sys.map((s) => {
     const rs = rows.filter((r) => r.system === s);
     return rs.length ? +(rs.reduce((a, r) => a + (Number(r.actual) || 0), 0) / rs.length).toFixed(1) : 0;
@@ -833,13 +832,6 @@ function renderCharts() {
     data: {
       labels: sys,
       datasets: [
-        {
-          label: "Planned %",
-          data: pl,
-          backgroundColor: "rgba(2,132,199,.65)",
-          borderRadius: 5,
-          borderSkipped: false
-        },
         {
           label: "Actual %",
           data: ac,
@@ -872,13 +864,6 @@ function renderCharts() {
       labels: lbs,
       datasets: [
         {
-          label: "Planned %",
-          data: topRows.map((r) => Number(r.planned) || 0),
-          backgroundColor: "rgba(2,132,199,.55)",
-          borderRadius: 4,
-          borderSkipped: false
-        },
-        {
           label: "Actual %",
           data: topRows.map((r) => Number(r.actual) || 0),
           backgroundColor: "rgba(79,70,229,.75)",
@@ -901,8 +886,8 @@ function renderCharts() {
   });
 
   const dd = rows.map((r) => ({
-    x: Number(r.planned) || 0,
-    y: +(Number(r.planned) - Number(r.actual)).toFixed(1)
+    x: Number(r.actual) || 0,
+    y: +(100 - Number(r.actual)).toFixed(1)
   }));
 
   charts.delay = new Chart("delayChart", {
@@ -923,7 +908,7 @@ function renderCharts() {
     options: {
       responsive: true,
       scales: {
-        x: { title: { display: true, text: "Planned %", font }, grid: { color: grid } },
+        x: { title: { display: true, text: "Actual %", font }, grid: { color: grid } },
         y: { title: { display: true, text: "Delay %", font }, grid: { color: grid } }
       },
       plugins: { legend: { display: false } }
