@@ -175,8 +175,9 @@
               <th onclick="sortT('date')"><i class="bi bi-calendar2-event"></i> Date</th>
               <th onclick="sortT('system')"><i class="bi bi-gear-wide-connected"></i> System</th>
               <th onclick="sortT('activity')"><i class="bi bi-card-text"></i> Activity</th>
-              <th onclick="sortT('required')"><i class="bi bi-box-seam"></i> Required Qty</th>
-              <th onclick="sortT('installed')"><i class="bi bi-hammer"></i> Installed Qty</th>
+              <th onclick="sortT('required')"><i class="bi bi-box-seam"></i> Required</th>
+              <th onclick="sortT('installed')"><i class="bi bi-hammer"></i> Installed</th>
+              <th onclick="sortT('unit')"><i class="bi bi-rulers"></i> Unit</th>
               <th onclick="sortT('actual')"><i class="bi bi-check2-all"></i> Actual %</th>
               <th onclick="sortT('delay')"><i class="bi bi-hourglass-split"></i> Delay %</th>
               <th onclick="sortT('status')"><i class="bi bi-flag"></i> Status</th>
@@ -265,13 +266,17 @@
           <input type="text" class="finp" id="m-activity" placeholder="e.g. AHU Installation – Level 3">
         </div>
         <div class="fgrp">
-  <label class="flbl"><i class="bi bi-box-seam"></i> Required Qty</label>
-  <input type="text" class="finp" id="m-required" placeholder="e.g., 150 sqm, 45 nos, 12.5 m">
-</div>
-<div class="fgrp">
-  <label class="flbl"><i class="bi bi-hammer"></i> Installed Qty</label>
-  <input type="text" class="finp" id="m-installed" placeholder="e.g., 75 sqm, 20 nos">
-</div>
+          <label class="flbl"><i class="bi bi-box-seam"></i> Required Qty</label>
+          <input type="number" class="finp" id="m-required" min="0" step="1" placeholder="0">
+        </div>
+        <div class="fgrp">
+          <label class="flbl"><i class="bi bi-hammer"></i> Installed Qty</label>
+          <input type="number" class="finp" id="m-installed" min="0" step="1" placeholder="0">
+        </div>
+        <div class="fgrp">
+          <label class="flbl"><i class="bi bi-rulers"></i> Unit</label>
+          <input type="text" class="finp" id="m-unit" placeholder="e.g., sqm, nos, m" value="nos">
+        </div>
         <div class="fgrp">
           <label class="flbl"><i class="bi bi-chat-left-dots-fill"></i> Remarks</label>
           <input type="text" class="finp" id="m-remarks" placeholder="Optional notes…">

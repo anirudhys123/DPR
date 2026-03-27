@@ -39,17 +39,11 @@ function autoSt(planned, actual) {
   return "On Track";
 }
 
-// Extract the first number from a string (supports decimals)
-function extractNumber(str) {
-  const match = String(str).match(/\d+(?:\.\d+)?/);
-  return match ? parseFloat(match[0]) : 0;
-}
-
-function calcProgress(requiredStr, installedStr) {
-  const required = extractNumber(requiredStr);
-  const installed = extractNumber(installedStr);
+function calcProgress(required, installed) {
+  required = Number(required) || 0;
+  installed = Number(installed) || 0;
   if (required === 0) return 0;
-  return Math.min(100, ((installed / required) * 100).toFixed(1));
+  return Math.min(100, (installed / required) * 100);
 }
 
 function escapeHtml(str) {
@@ -88,18 +82,18 @@ async function load() {
     if (error) throw error;
 
     rows = (data || []).map((r) => {
-      // required and installed are now stored as strings (e.g., "150 sqm")
-      const requiredStr = String(r.required || "0");
-      const installedStr = String(r.installed || "0");
-      const actual = calcProgress(requiredStr, installedStr);
+      const required = Number(r.required) || 0;
+      const installed = Number(r.installed) || 0;
+      const actual = calcProgress(required, installed);
       const status = autoSt(100, actual);
       return {
         id: r.id,
         date: r.date || "",
         system: r.system || "HVAC",
         activity: r.activity || "",
-        required: requiredStr,
-        installed: installedStr,
+        required: required,
+        installed: installed,
+        unit: r.unit || "nos",
         planned: 100,
         actual: actual,
         status: status,
@@ -145,9 +139,8 @@ function getSorted(arr) {
       va = 100 - a.actual;
       vb = 100 - b.actual;
     } else if (sortCol === "required" || sortCol === "installed") {
-      // Sort by the numeric part for quantities
-      va = extractNumber(a[sortCol]);
-      vb = extractNumber(b[sortCol]);
+      va = Number(a[sortCol]) || 0;
+      vb = Number(b[sortCol]) || 0;
     } else if (sortCol === "actual") {
       va = Number(a.actual) || 0;
       vb = Number(b.actual) || 0;
@@ -170,7 +163,7 @@ function sortT(col) {
   sortCol = col;
 
   document.querySelectorAll("thead th").forEach((t) => t.classList.remove("asc", "desc"));
-  const map = { date: 1, system: 2, activity: 3, required: 4, installed: 5, actual: 6, delay: 7, status: 8 };
+  const map = { date: 1, system: 2, activity: 3, required: 4, installed: 5, unit: 6, actual: 7, delay: 8, status: 9 };
   const th = document.querySelectorAll("thead th")[map[col]];
   if (th) th.classList.add(sortDir === "asc" ? "asc" : "desc");
 
@@ -191,7 +184,7 @@ function render() {
   if (!filtered.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="12">
+        <td colspan="13">
           <div class="empty">
             <div class="empty-ico"><i class="bi bi-inbox"></i></div>
             <p>No activities found</p>
@@ -236,8 +229,9 @@ function rowHTML(r) {
       <td><span class="td-date" contenteditable="true" onblur="cEdit(this,'${r.id}','date')">${escapeHtml(r.date)}</span></td>
       <td><span class="sys-p sys-${escapeAttr(r.system)}"><i class="bi bi-${ico}"></i>${escapeHtml(r.system)}</span></td>
       <td style="max-width:210px;font-weight:500" contenteditable="true" onblur="cEdit(this,'${r.id}','activity')">${escapeHtml(r.activity)}</td>
-      <td contenteditable="true" onblur="cEdit(this,'${r.id}','required')">${escapeHtml(r.required || "0")}</td>
-      <td contenteditable="true" onblur="cEdit(this,'${r.id}','installed')">${escapeHtml(r.installed || "0")}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','required')">${r.required || 0}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','installed')">${r.installed || 0}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','unit')">${escapeHtml(r.unit)}</td>
       <td>
         <div class="prog">
           <div class="prog-bar"><div class="prog-fill pf-ok" style="width:${ap}%"></div></div>
@@ -319,17 +313,18 @@ async function cEdit(el, id, field) {
     let v = el.textContent.trim();
     const updateObj = {};
 
-    // For required/installed, we store the string as-is (including unit)
-    // For other fields, just store the value
-    updateObj[field] = v;
-
-    // If required or installed changed, recalculate actual and status
     if (field === "required" || field === "installed") {
+      v = parseFloat(v) || 0;
+      el.textContent = v;
+      updateObj[field] = v;
+
       const newRequired = field === "required" ? v : r.required;
       const newInstalled = field === "installed" ? v : r.installed;
       const newActual = calcProgress(newRequired, newInstalled);
       updateObj.actual = newActual;
       updateObj.status = autoSt(100, newActual);
+    } else {
+      updateObj[field] = v;
     }
 
     const { error } = await supabaseClient.from("dpr").update(updateObj).eq("id", id);
@@ -339,7 +334,7 @@ async function cEdit(el, id, field) {
     await load();
   } catch (err) {
     console.error("Update error:", err);
-    toast("Failed to update row", "bi-exclamation-triangle-fill", "error");
+    toast("Failed to update row: " + (err.message || "Unknown error"), "bi-exclamation-triangle-fill", "error");
     await load();
   }
 }
@@ -400,6 +395,7 @@ function openModal() {
   document.getElementById("m-activity").value = "";
   document.getElementById("m-required").value = "";
   document.getElementById("m-installed").value = "";
+  document.getElementById("m-unit").value = "nos";
   document.getElementById("m-remarks").value = "";
   document.getElementById("m-system").selectedIndex = 0;
   document.getElementById("ov").classList.add("open");
@@ -418,6 +414,7 @@ function openEdit(id) {
   document.getElementById("m-activity").value = r.activity;
   document.getElementById("m-required").value = r.required;
   document.getElementById("m-installed").value = r.installed;
+  document.getElementById("m-unit").value = r.unit;
   document.getElementById("m-remarks").value = r.remarks || "";
   document.getElementById("ov").classList.add("open");
 }
@@ -430,8 +427,9 @@ async function saveRow() {
   const date = document.getElementById("m-date").value;
   const system = document.getElementById("m-system").value;
   const activity = document.getElementById("m-activity").value.trim();
-  const required = document.getElementById("m-required").value.trim();
-  const installed = document.getElementById("m-installed").value.trim();
+  const required = parseFloat(document.getElementById("m-required").value) || 0;
+  const installed = parseFloat(document.getElementById("m-installed").value) || 0;
+  const unit = document.getElementById("m-unit").value.trim() || "nos";
   const remarks = document.getElementById("m-remarks").value.trim();
 
   if (!date || !activity) {
@@ -447,13 +445,13 @@ async function saveRow() {
     if (editId) {
       const { error } = await supabaseClient
         .from("dpr")
-        .update({ date, system, activity, required, installed, planned, actual, status, remarks })
+        .update({ date, system, activity, required, installed, unit, planned, actual, status, remarks })
         .eq("id", editId);
       if (error) throw error;
     } else {
       const { error } = await supabaseClient
         .from("dpr")
-        .insert([{ date, system, activity, required, installed, planned, actual, status, remarks }]);
+        .insert([{ date, system, activity, required, installed, unit, planned, actual, status, remarks }]);
       if (error) throw error;
     }
 
@@ -478,13 +476,14 @@ function exportExcel() {
   }
 
   const data = [
-    ["Date", "System", "Activity", "Required", "Installed", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
+    ["Date", "System", "Activity", "Required Qty", "Installed Qty", "Unit", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
     ...rows.map((r) => [
       r.date,
       r.system,
       r.activity,
       r.required,
       r.installed,
+      r.unit,
       r.actual,
       (100 - Number(r.actual)).toFixed(1),
       r.status,
@@ -495,8 +494,8 @@ function exportExcel() {
 
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws["!cols"] = [
-    { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 15 },
-    { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
+    { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 12 },
+    { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
   ];
 
   const wb = XLSX.utils.book_new();
