@@ -39,19 +39,16 @@ function autoSt(planned, actual) {
   return "On Track";
 }
 
-// Extract the first number from a string (supports decimals)
 function extractNumber(str) {
   const match = String(str).match(/\d+(?:\.\d+)?/);
   return match ? parseFloat(match[0]) : 0;
 }
 
-// Calculate progress as a number, then round to nearest integer (for bigint columns)
 function calcProgress(requiredStr, installedStr) {
   const required = extractNumber(requiredStr);
   const installed = extractNumber(installedStr);
   if (required === 0) return 0;
   const progress = (installed / required) * 100;
-  // Round to nearest integer (because database column is bigint)
   return Math.round(Math.min(100, progress));
 }
 
@@ -91,7 +88,6 @@ async function load() {
     if (error) throw error;
 
     rows = (data || []).map((r) => {
-      // required and installed are stored as strings (e.g., "150 sqm")
       const requiredStr = String(r.required || "0");
       const installedStr = String(r.installed || "0");
       const actual = calcProgress(requiredStr, installedStr);
@@ -103,6 +99,7 @@ async function load() {
         activity: r.activity || "",
         required: requiredStr,
         installed: installedStr,
+        unit: r.unit || "nos",          // <-- retrieve unit
         planned: 100,
         actual: actual,
         status: status,
@@ -148,7 +145,6 @@ function getSorted(arr) {
       va = 100 - a.actual;
       vb = 100 - b.actual;
     } else if (sortCol === "required" || sortCol === "installed") {
-      // Sort by the numeric part for quantities
       va = extractNumber(a[sortCol]);
       vb = extractNumber(b[sortCol]);
     } else if (sortCol === "actual") {
@@ -173,7 +169,8 @@ function sortT(col) {
   sortCol = col;
 
   document.querySelectorAll("thead th").forEach((t) => t.classList.remove("asc", "desc"));
-  const map = { date: 1, system: 2, activity: 3, required: 4, installed: 5, actual: 6, delay: 7, status: 8 };
+  // Update map to include unit (index 6)
+  const map = { date: 1, system: 2, activity: 3, required: 4, installed: 5, unit: 6, actual: 7, delay: 8, status: 9 };
   const th = document.querySelectorAll("thead th")[map[col]];
   if (th) th.classList.add(sortDir === "asc" ? "asc" : "desc");
 
@@ -194,7 +191,7 @@ function render() {
   if (!filtered.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="12">
+        <td colspan="13">
           <div class="empty">
             <div class="empty-ico"><i class="bi bi-inbox"></i></div>
             <p>No activities found</p>
@@ -241,6 +238,7 @@ function rowHTML(r) {
       <td style="max-width:210px;font-weight:500" contenteditable="true" onblur="cEdit(this,'${r.id}','activity')">${escapeHtml(r.activity)}</td>
       <td contenteditable="true" onblur="cEdit(this,'${r.id}','required')">${escapeHtml(r.required || "0")}</td>
       <td contenteditable="true" onblur="cEdit(this,'${r.id}','installed')">${escapeHtml(r.installed || "0")}</td>
+      <td contenteditable="true" onblur="cEdit(this,'${r.id}','unit')">${escapeHtml(r.unit)}</td>
       <td>
         <div class="prog">
           <div class="prog-bar"><div class="prog-fill pf-ok" style="width:${ap}%"></div></div>
@@ -322,17 +320,20 @@ async function cEdit(el, id, field) {
     let v = el.textContent.trim();
     const updateObj = {};
 
-    // For required/installed, we store the string as-is (including unit)
-    // For other fields, just store the value
-    updateObj[field] = v;
-
-    // If required or installed changed, recalculate actual and status
+    // For all fields, store the value as-is. For numeric fields, ensure number.
     if (field === "required" || field === "installed") {
+      // Convert to number but store as string (database text column)
+      v = extractNumber(v).toString();
+      el.textContent = v; // update displayed value
+      updateObj[field] = v;
+
       const newRequired = field === "required" ? v : r.required;
       const newInstalled = field === "installed" ? v : r.installed;
       const newActual = calcProgress(newRequired, newInstalled);
-      updateObj.actual = newActual;  // Already integer
+      updateObj.actual = newActual;
       updateObj.status = autoSt(100, newActual);
+    } else {
+      updateObj[field] = v;
     }
 
     const { error } = await supabaseClient.from("dpr").update(updateObj).eq("id", id);
@@ -403,6 +404,7 @@ function openModal() {
   document.getElementById("m-activity").value = "";
   document.getElementById("m-required").value = "";
   document.getElementById("m-installed").value = "";
+  document.getElementById("m-unit").value = "nos";
   document.getElementById("m-remarks").value = "";
   document.getElementById("m-system").selectedIndex = 0;
   document.getElementById("ov").classList.add("open");
@@ -421,6 +423,7 @@ function openEdit(id) {
   document.getElementById("m-activity").value = r.activity;
   document.getElementById("m-required").value = r.required;
   document.getElementById("m-installed").value = r.installed;
+  document.getElementById("m-unit").value = r.unit;
   document.getElementById("m-remarks").value = r.remarks || "";
   document.getElementById("ov").classList.add("open");
 }
@@ -435,6 +438,7 @@ async function saveRow() {
   const activity = document.getElementById("m-activity").value.trim();
   const required = document.getElementById("m-required").value.trim();
   const installed = document.getElementById("m-installed").value.trim();
+  const unit = document.getElementById("m-unit").value.trim() || "nos";
   const remarks = document.getElementById("m-remarks").value.trim();
 
   if (!date || !activity) {
@@ -450,13 +454,13 @@ async function saveRow() {
     if (editId) {
       const { error } = await supabaseClient
         .from("dpr")
-        .update({ date, system, activity, required, installed, planned, actual, status, remarks })
+        .update({ date, system, activity, required, installed, unit, planned, actual, status, remarks })
         .eq("id", editId);
       if (error) throw error;
     } else {
       const { error } = await supabaseClient
         .from("dpr")
-        .insert([{ date, system, activity, required, installed, planned, actual, status, remarks }]);
+        .insert([{ date, system, activity, required, installed, unit, planned, actual, status, remarks }]);
       if (error) throw error;
     }
 
@@ -481,13 +485,14 @@ function exportExcel() {
   }
 
   const data = [
-    ["Date", "System", "Activity", "Required", "Installed", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
+    ["Date", "System", "Activity", "Required", "Installed", "Unit", "Actual %", "Delay %", "Status", "Remarks", "Photos"],
     ...rows.map((r) => [
       r.date,
       r.system,
       r.activity,
       r.required,
       r.installed,
+      r.unit,
       r.actual,
       (100 - Number(r.actual)).toFixed(1),
       r.status,
@@ -499,7 +504,7 @@ function exportExcel() {
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws["!cols"] = [
     { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 15 },
-    { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
+    { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 30 }
   ];
 
   const wb = XLSX.utils.book_new();
